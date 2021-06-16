@@ -1,8 +1,6 @@
+from scapy.all import *
 import argparse
 import sys
-import time
-from scapy.all import *
-
 import arp_poisoning
 import globals
 

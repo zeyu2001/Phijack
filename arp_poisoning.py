@@ -62,23 +62,23 @@ def arp_restore(destinationIP, sourceIP, destinationMAC, sourceMAC):
     send(packet, count=4, verbose=False)
 
 
-def set_ip_forwarding(is_enabled):
+def set_ip_forwarding(enable):
     """
     Enables IP forwarding through system commands depending on the OS
 
     Args:
-        is_enabled (bool): True if enable, False otherwise.
+        enable (bool): True if enable, False otherwise.
     """
-    is_enabled = int(is_enabled)
+    enable = int(enable)
     platform_name = platform.system()
 
     if platform_name == "Linux":
         # Linux
-        os.system('echo {} > /proc/sys/net/ipv4/ip_forward'.format(is_enabled))
+        os.system('echo {} > /proc/sys/net/ipv4/ip_forward'.format(enable))
 
     elif platform_name == "Darwin":
         # OSX
-        os.system('sysctl -w net.inet.ip.forwarding={}'.format(is_enabled))
+        os.system('sysctl -w net.inet.ip.forwarding={}'.format(enable))
     # elif platform_name == "Windows":
 
 
