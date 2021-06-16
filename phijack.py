@@ -1,11 +1,6 @@
-import os
-from scapy.all import *
-from sys import exit
-
 from arp_poisoning import *
 from tcp_hijacking import *
 import globals
-
 
 ASCII_ART = """
  ____    __                                 __         
@@ -54,7 +49,7 @@ class ArpPoisoning(Attack):
         super().__init__(iface)
 
     def __call__(self):
-        
+
         print(f"[+] Determining target and gateway MAC address.")
 
         result = arp_scan(self.target, self.iface)
@@ -142,7 +137,7 @@ class CommandHandler:
         self.iface = conf.iface
         self.attack = 'DISCOVER'
         self.attack_params = ArpScan.get_params()
-    
+
     def parse_cmd(self, cmd):
         """
         Parse the user command.
@@ -154,7 +149,7 @@ class CommandHandler:
 
             if len(data) != 3:
                 raise ValueError("Expected SET <key> <value>")
-            
+
             key, value = data[1:]
 
             if key.lower() == 'iface':
@@ -162,8 +157,8 @@ class CommandHandler:
                 print(f"IFACE => {value}")
 
                 globals.IFACE = self.iface
-                globals.MY_MAC = get_if_hwaddr(IFACE)
-                globals.MY_IP = get_if_addr(IFACE)
+                globals.MY_MAC = get_if_hwaddr(globals.IFACE)
+                globals.MY_IP = get_if_addr(globals.IFACE)
 
             elif key.lower() == 'attack':
                 attack = value.lower()
@@ -171,12 +166,12 @@ class CommandHandler:
                     self.attack = 'DISCOVER'
                     self.attack_params = ArpScan.get_params()
                     print("ATTACK => DISCOVER")
-                
+
                 elif attack == 'mitm':
                     self.attack = 'MITM'
                     self.attack_params = ArpPoisoning.get_params()
                     print("ATTACK => MITM")
-                
+
                 elif attack == 'hijack':
                     self.attack = 'HIJACK'
                     self.attack_params = SessionHijacking.get_params()
@@ -184,11 +179,11 @@ class CommandHandler:
 
                 else:
                     raise ValueError(f"Unrecognized attack {attack}")
-            
+
             elif key.upper() in self.attack_params:
                 self.attack_params[key.upper()] = value
                 print(f"{key.upper()} => {value}")
-            
+
             else:
                 raise ValueError(f"Unrecognized parameter {key}")
 
@@ -202,21 +197,21 @@ class CommandHandler:
             for param in self.attack_params:
                 print(f"\t{param} => {self.attack_params[param]}")
             print()
-        
+
         elif cmd == 'EXPLOIT' or cmd == 'RUN':
             if self.attack == 'DISCOVER':
                 attack = ArpScan(
-                    self.attack_params['RHOSTS'], 
+                    self.attack_params['RHOSTS'],
                     self.iface
                 )
-            
+
             elif self.attack == 'MITM':
                 attack = ArpPoisoning(
-                    self.attack_params['TARGET'], 
+                    self.attack_params['TARGET'],
                     self.attack_params['GATEWAY'],
                     self.iface
                 )
-            
+
             elif self.attack == 'HIJACK':
                 attack = SessionHijacking(
                     self.attack_params['TARGET'],
@@ -232,15 +227,15 @@ class CommandHandler:
 
         elif cmd == 'QUIT':
             return True
-        
+
         else:
             # Allow system commands
             print(os.system(cmd))
 
         return False
 
-def main():
 
+def main():
     globals.IFACE = conf.iface
     globals.MY_MAC = get_if_hwaddr(conf.iface)
     globals.MY_IP = get_if_addr(conf.iface)
@@ -254,14 +249,14 @@ def main():
 
     while True:
         try:
-            cmd_handler.parse_cmd(input('> '))
-
+            cmd_handler.parse_cmd(input('[Phijack] > '))
         except KeyboardInterrupt:
+            print()
             print("Bye!")
             break
-
         except ValueError as e:
             print(e)
+
 
 if __name__ == '__main__':
     main()
