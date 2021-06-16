@@ -135,8 +135,13 @@ class SessionHijacking(Attack):
 class CommandHandler:
     def __init__(self):
         self.iface = conf.iface
-        self.attack = 'DISCOVER'
+        self.attack = 'discover'
         self.attack_params = ArpScan.get_params()
+        self.attacks = {
+            'discover': ArpScan,
+            'mitm': ArpPoisoning,
+            'hijack': SessionHijacking
+        }
 
     def parse_cmd(self, cmd):
         """
@@ -162,21 +167,10 @@ class CommandHandler:
 
             elif key.lower() == 'attack':
                 attack = value.lower()
-                if attack == 'discover':
-                    self.attack = 'DISCOVER'
-                    self.attack_params = ArpScan.get_params()
-                    print("ATTACK => DISCOVER")
-
-                elif attack == 'mitm':
-                    self.attack = 'MITM'
-                    self.attack_params = ArpPoisoning.get_params()
-                    print("ATTACK => MITM")
-
-                elif attack == 'hijack':
-                    self.attack = 'HIJACK'
-                    self.attack_params = SessionHijacking.get_params()
-                    print("ATTACK => HIJACK")
-
+                if attack in self.attacks:
+                    self.attack = attack
+                    self.attack_params = self.attacks[attack].get_params()
+                    print("ATTACK => {}".format(self.attack))
                 else:
                     raise ValueError(f"Unrecognized attack {attack}")
 
@@ -199,20 +193,20 @@ class CommandHandler:
             print()
 
         elif cmd == 'EXPLOIT' or cmd == 'RUN':
-            if self.attack == 'DISCOVER':
+            if self.attack == 'discover':
                 attack = ArpScan(
                     self.attack_params['RHOSTS'],
                     self.iface
                 )
 
-            elif self.attack == 'MITM':
+            elif self.attack == 'mitm':
                 attack = ArpPoisoning(
                     self.attack_params['TARGET'],
                     self.attack_params['GATEWAY'],
                     self.iface
                 )
 
-            elif self.attack == 'HIJACK':
+            elif self.attack == 'hijack':
                 attack = SessionHijacking(
                     self.attack_params['TARGET'],
                     self.attack_params['GATEWAY'],
@@ -235,18 +229,24 @@ class CommandHandler:
         return False
 
 
-def main():
-    globals.IFACE = conf.iface
-    globals.MY_MAC = get_if_hwaddr(conf.iface)
-    globals.MY_IP = get_if_addr(conf.iface)
-
+def print_greeting():
+    """
+    Prints greeting message.
+    """
     print(ASCII_ART)
     print("{:^55}".format("TCP SESSION HIJACKING"))
     print("{:^55}".format("Attacking and Defending HTTP and Telnet Sessions"))
     print("\n{:^55}\n".format("Please use this tool responsibly!"))
 
-    cmd_handler = CommandHandler()
 
+def main():
+    print_greeting()
+
+    globals.IFACE = conf.iface
+    globals.MY_MAC = get_if_hwaddr(conf.iface)
+    globals.MY_IP = get_if_addr(conf.iface)
+
+    cmd_handler = CommandHandler()
     while True:
         try:
             cmd_handler.parse_cmd(input('[Phijack] > '))
