@@ -167,7 +167,7 @@ class CommandHandler:
             data = cmd.split()
 
             if len(data) < 3:
-                raise ValueError("Expected SET <key> <value>")
+                raise ValueError("Expected: SET <key> <value>")
 
             key, value = data[1], ' '.join(data[2:])
 
@@ -193,12 +193,16 @@ class CommandHandler:
                 print(f"{key.upper()} => {value}")
 
             else:
-                raise ValueError(f"Unrecognized parameter {key}")
+                raise ValueError(f"Unrecognized parameter: {key}")
 
         elif cmd == 'SHOW OPTIONS':
             self.print_parameters()
 
         elif cmd == 'EXPLOIT' or cmd == 'RUN':
+            if "" in self.attack_params.values():
+                empty_params = [param for param, val in self.attack_params.items() if val == ""]
+                raise ValueError(f"Empty parameters: {empty_params}")
+
             if self.attack == 'discover':
                 attack = ArpScan(
                     self.attack_params['RHOSTS'],
