@@ -144,12 +144,25 @@ class CommandHandler:
             'hijack': SessionHijacking
         }
 
+    def print_parameters(self):
+        """
+        Prints basic and attack parameters configured
+        """
+        print("-"*32)
+        print("Basic Parameters:")
+        print(f"\tIFACE => {self.iface}")
+        print(f"\tATTACK => {self.attack}")
+
+        print("Attack Parameters:")
+        for param in self.attack_params:
+            print(f"\t{param} => {self.attack_params[param]}")
+        print("-"*32)
+
     def parse_cmd(self, cmd):
         """
         Parse the user command.
         Returns True if quit, False otherwise.
         """
-
         if cmd.startswith("SET"):
             data = cmd.split()
 
@@ -183,15 +196,7 @@ class CommandHandler:
                 raise ValueError(f"Unrecognized parameter {key}")
 
         elif cmd == 'SHOW OPTIONS':
-
-            print("\nBasic Parameters:\n")
-            print(f"\tIFACE => {self.iface}")
-            print(f"\tATTACK => {self.attack}")
-
-            print("\nAttack Parameters:\n")
-            for param in self.attack_params:
-                print(f"\t{param} => {self.attack_params[param]}")
-            print()
+            self.print_parameters()
 
         elif cmd == 'EXPLOIT' or cmd == 'RUN':
             if self.attack == 'discover':
@@ -221,7 +226,7 @@ class CommandHandler:
             except KeyboardInterrupt:
                 print("Detected keyboard interrupt, ending attack.")
 
-        elif cmd == 'QUIT':
+        elif cmd == 'QUIT' or cmd == "EXIT":
             return True
 
         else:
