@@ -41,7 +41,7 @@ class ArpScan(Attack):
         return {'RHOSTS': ''}
 
 
-class MITM(Attack):
+class ArpPoisoning(Attack):
     def __init__(self, target, gateway, iface):
         self.target = target
         self.gateway = gateway
@@ -74,23 +74,19 @@ class MITM(Attack):
         print(f"[+] Performing ARP poisoning MITM.")
         return targetMAC, gatewayMAC
 
-
-class ArpPoisoning(MITM):
-    def __init__(self, target, gateway, iface):
-        super().__init__(target, gateway, iface)
-
     def __call__(self):
-        targetMAC, gatewayMAC = super().recon()
+        targetMAC, gatewayMAC = self.recon()
 
         sniff_filter = f"ip and (ether src {targetMAC} or ether src {gatewayMAC})"
-        arp_mitm(self.target, self.gateway, targetMAC, gatewayMAC, globals.MY_MAC, sniff_parser, sniff_filter, self.iface)
+        arp_mitm(self.target, self.gateway, targetMAC, gatewayMAC, globals.MY_MAC,
+                 sniff_parser, sniff_filter, self.iface)
 
     @staticmethod
     def get_params():
         return {'TARGET': '', 'GATEWAY': ''}
 
 
-class SessionHijacking(MITM):
+class SessionHijacking(ArpPoisoning):
     def __init__(self, target, gateway, iface, proto, cmd=None):
         self.proto = proto
         self.cmd = cmd
@@ -125,6 +121,7 @@ class CommandHandler:
             'mitm': ArpPoisoning,
             'hijack': SessionHijacking
         }
+        self.hijack_protocols = ('telnet', 'http')
 
     def print_parameters(self):
         """
@@ -171,6 +168,13 @@ class CommandHandler:
                     raise ValueError(f"Unrecognized attack {attack}")
 
             elif key.upper() in self.attack_params:
+                if key.upper() == "PROTO":
+                    if value.lower() not in self.hijack_protocols:
+                        raise ValueError(f"Unsupported hijack protocol: {value}")
+                    elif value.lower() == "http":
+                        self.attack_params["CMD"] = "Unused"
+                    elif value.lower() == "telnet":
+                        self.attack_params["CMD"] = ""
                 self.attack_params[key.upper()] = value
                 print(f"{key.upper()} => {value}")
 
